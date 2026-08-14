@@ -276,6 +276,51 @@
     flex-shrink:0;
   }
 
+  .distribution-section{
+    margin-top: 22px;
+  }
+  .distribution-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .distribution-bar{
+    display:flex;
+    width:100%;
+    height: 46px;
+    border-radius: 12px;
+    overflow:hidden;
+  }
+  .distribution-segment{ height:100%; }
+
+  .export-actions{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .export-btn{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family:'Inter';
+    font-weight:600;
+    font-size: 13.5px;
+    padding: 11px 16px;
+    border-radius: 10px;
+    cursor:pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .export-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .export-btn svg{ flex-shrink:0; }
+  .export-btn.copied{ border-color: #3ddc97; color: #3ddc97; }
+
   footer{
     margin-top: 30px;
     text-align:center;
@@ -329,6 +374,26 @@
     <div id="results">
       <div class="result-thumb"><img id="resultImg" alt="uploaded image"></div>
       <div class="result-list" id="resultList"></div>
+    </div>
+
+    <div class="distribution-section" id="distributionSection" style="display:none;">
+      <div class="distribution-label">Colour Distribution</div>
+      <div class="distribution-bar" id="distributionBar"></div>
+    </div>
+
+    <div class="export-actions" id="exportActions" style="display:none;">
+      <button class="export-btn" id="copyCssBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy CSS Variables
+      </button>
+      <button class="export-btn" id="copyJsonBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Copy JSON
+      </button>
+      <button class="export-btn" id="downloadTxtBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download .txt
+      </button>
     </div>
   </div>
 
@@ -449,8 +514,15 @@ const extractBtn = document.getElementById('extractBtn');
 const results = document.getElementById('results');
 const resultImg = document.getElementById('resultImg');
 const resultList = document.getElementById('resultList');
+const distributionSection = document.getElementById('distributionSection');
+const distributionBar = document.getElementById('distributionBar');
+const exportActions = document.getElementById('exportActions');
+const copyCssBtn = document.getElementById('copyCssBtn');
+const copyJsonBtn = document.getElementById('copyJsonBtn');
+const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 
 let currentImage = null;
+let currentPalette = [];
 
 dropzone.addEventListener('click', (e)=>{
   if(e.target === changeBtn) return;
@@ -481,6 +553,8 @@ function handleFile(file){
       dzPreview.classList.add('active');
       extractBtn.disabled = false;
       results.classList.remove('active');
+      distributionSection.style.display = 'none';
+      exportActions.style.display = 'none';
     };
     img.src = e.target.result;
   };
@@ -515,10 +589,15 @@ extractBtn.addEventListener('click', async ()=>{
 
   resultImg.src = dzImg.src;
   resultList.innerHTML = '';
+  distributionBar.innerHTML = '';
+  currentPalette = [];
+
   combined.forEach(({center, pct})=>{
     const hex = rgbToHex(center);
     const rgbStr = `rgb(${Math.round(center[0])}, ${Math.round(center[1])}, ${Math.round(center[2])})`;
     const name = closestColorName(center);
+    currentPalette.push({ name, hex, rgb: [Math.round(center[0]), Math.round(center[1]), Math.round(center[2])], percentage: Number(pct.toFixed(1)) });
+
     const row = document.createElement('div');
     row.className = 'result-row';
     row.style.borderLeftColor = hex;
@@ -531,11 +610,51 @@ extractBtn.addEventListener('click', async ()=>{
       <div class="result-pct">${pct.toFixed(1)}%</div>
     `;
     resultList.appendChild(row);
+
+    const seg = document.createElement('div');
+    seg.className = 'distribution-segment';
+    seg.style.width = pct + '%';
+    seg.style.background = hex;
+    seg.title = `${name} — ${pct.toFixed(1)}%`;
+    distributionBar.appendChild(seg);
   });
+
   results.classList.add('active');
+  distributionSection.style.display = 'block';
+  exportActions.style.display = 'flex';
 
   extractBtn.disabled = false;
   extractBtn.innerHTML = originalLabel;
+});
+
+function flashCopied(btn){
+  const original = btn.innerHTML;
+  btn.classList.add('copied');
+  btn.innerHTML = 'Copied!';
+  setTimeout(()=>{ btn.classList.remove('copied'); btn.innerHTML = original; }, 1400);
+}
+
+copyCssBtn.addEventListener('click', async ()=>{
+  const css = ':root {\n' + currentPalette.map((c,i)=>`  --palette-color-${i+1}: ${c.hex};`).join('\n') + '\n}';
+  try{ await navigator.clipboard.writeText(css); flashCopied(copyCssBtn); }catch(e){ alert('Copy failed — your browser may block clipboard access here.'); }
+});
+
+copyJsonBtn.addEventListener('click', async ()=>{
+  const json = JSON.stringify(currentPalette, null, 2);
+  try{ await navigator.clipboard.writeText(json); flashCopied(copyJsonBtn); }catch(e){ alert('Copy failed — your browser may block clipboard access here.'); }
+});
+
+downloadTxtBtn.addEventListener('click', ()=>{
+  const lines = currentPalette.map((c,i)=>`Color ${i+1}: ${c.name}  —  ${c.hex}  —  rgb(${c.rgb.join(', ')})  —  ${c.percentage}%`);
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'palette.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 </script>
 </body>
